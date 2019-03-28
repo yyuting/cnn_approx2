@@ -1,0 +1,288 @@
+louyiwen@virginia.edu
+
+training time:
+training is basically proportional to number of pixels each batch, larger image size being a little bit faster.
+loading data is basically proportional to the number of batches given same image size, but larger image size reads much faster given same pixel number.
+Also, loading data time is effected significantly by the network status.
+
+lz4 compression on python, compressed a 14400KB binary file to 14014KB...
+
+build tensorflow from source may solve the problem, but involves dealing with CUDA manually, worth trying?
+hi size >= 60, out of resource error
+hi size >= 20, conv bug error
+same for med, and lo when *4 and *16
+small batch size cannot exeed something between 320 - 400 batch size is actually due to tensorflow bug
+
+test inference timing the following 2 networks:
+1 layer, 1 33x33 conv
+1 layer, 2 33x33 conv
+discard first run, then average on 10 runs
+on batch sizes:
+640*320*240: 4.74 vs 9.20
+160*640*480: 4.74 vs 9.20
+40*1280*960: 4.74 vs 9.20
+
+another related work:
+http://vladlen.info/papers/fast-image-processing.pdf
+Scalar parameters can be inserted as an extra input layer
+
+large blur:
+augmented the small sized image
+zero padding failed
+nearest neighbour upsampling failed
+checked convolutional pyramid actually gives a good estimate.
+but they cheated somehow (h1, h2 are fixed).
+they made a good point that higher frequency shortcut may not be needed, so I modified the u-net structure.
+also build a "cheating" architecture that disables connection between different color maps.
+but still didn't get desirable result yet.
+
+tensorflow compression: lz4
+
+margo1: 151
+margo2: 147
+margo3: 150
+minion1: 
+minion2: 149
+minion3: 
+
+saver120 (test_blur_small):
+L2: 5.45363300344e-06
+psnr: 53.1009688482
+cutoff at 0.01-0.03 will be the same good, and 0.05 goes significantly worse
+113/171 (66.08%) set to 0
+L2: 8.55428896119e-06
+psnr: 50.4396857441
+
+saver122 (test_sharpen_large) fewest weights for now:
+L2: 3.34003012573e-05
+psnr: 46.1813366306
+cutoff at 0.01:
+520/1656 (31.40%) set to 0
+L2: 3.74132755783e-05
+psnr: 45.1424228472
+
+saver102 (test_sharpen_large):
+L2: 5.14658141739e-05
+psnr: 44.2290795561
+more weights are cut to 0
+cutoff at 0.01:
+L2: 5.74810389505e-05
+psnr: 43.2682215526
+593/2142 (24.42%) set to 0
+
+saver103 (test_sharpen_large):
+L2: 7.23740295717e-05
+psnr: 42.7290947714
+cutoff at 0.03:
+623/2142 (29.08%) set to 0
+L2: 0.000164793229553
+psnr: 37.4572327444
+cutoff at 0.01:
+523/2142 (24.42%) set to 0
+L2: 8.26958802881e-05
+psnr: 41.3813636469
+
+saver105 (test_sharpen_small):
+L2: 0.000159820341421
+psnr: 39.3771139014
+cutoff at 0.01:
+57/90 (63.33%) set to 0
+L2: 0.000280904852122
+psnr: 35.5107810704
+cutoff at 0.001:
+49/90 (54.44%) set to 0
+L2: 0.000160452100104
+psnr: 39.3325434429
+
+reference papers:
+http://vladlen.info/publications/fast-image-processing-fully-convolutional-networks/
+
+Convolution Pyramids:
+Use an architecture similar to u-net, 3 small kernels on each layer, to aproximate some special filters through optimization on a single input/output pair.
+http://www.cs.huji.ac.il/labs/cglab/projects/convpyr/
+
+https://arxiv.org/abs/1704.02071
+
+test_output7, sharpen small, floating value, none activation: 
+91: L2 0.00015 psnr 39.40
+
+test_output6 for blur large: 62,64, 65
+
+test_output5 for sharpen large: 84, 86, 87
+test_output4 for sharpen small: 74, 75, 76
+test_output3 for blur large: 61, 63, 64
+
+mean pool
+plus instead of concatenate
+try specifically for convolution
+L2 only should work eventually
+no activation
+
+summary:
+
+fix the boundary in ground truth and train the loss on the entire image works
+
+L1+L2, works, scale doesn't quite matter. both L2+0.5L2 and L2+2L2 worked
+
+batch normalization doesn't help at all...
+batch normalization + RELU, doesn't converge at all at learning rates (0.0001, 0.001, 0.01), with and without batch normalization on passtrough links
+batch normalization + sigmoid, usually converges, but can't find reasonally good result
+tried learning rates (0.0001, 0.001, 0.01)
+with and without batch normalization on passthrough links
+L1+L2 and piecewise loss
+sigmoid or RELU on output layer
+different ways to initialize weights (const std or a function on nchannels, as in other u-net examples)
+and bias (zero or same as weights)
+different moving average decay parameter (0.9, 0.99 and 0.999)
+
+each test runs 20 - 30 times to make sure they have enough restarts
+
+Fuwen thinks it might be because we're trying to use a very complicated and nonlinear system (unet with batch normalization) to fit a very simple linear operation (5x5 blur).
+
+55: 11 tries
+100 to 0.5
+250 to 0.1
+500 to 0.04
+
+54: 11 tries
+100 to 0.9
+250 to 0.5
+
+53: 6 tries
+margo1, minion1, minion2
+
+52: 20 tries
+100 to 1.0
+300 to 0.5
+750 to 0.2
+1000 to 0.1
+1500 0.09
+
+51: 10 tries, never converge, failed
+
+46: 6 tries
+
+50: 9 tries, dropout never converges...
+margo1, margo3, minion1, minion2, minion3
+300 to 0.4
+
+49: 30 tries
+margo1, margo2, margo3, minion1, minion3
+
+48: 30 tries failed
+margo1, margo2, margo3, minion1, minion2, minion3
+150 to 1.0
+300 to 0.6
+500 to 0.2
+750 to 0.1
+1000 to 0.07
+
+47: 30 tries
+margo1, margo2, margo3, minion1, minion2
+200 to 0.1
+500 to 0.02
+
+45: 30 tries failed
+500 to 0.2
+1500 to 0.15
+2000 to 0.1
+2500 to 0.06
+3000 to 0.04
+3500 to 0.03
+4000 to 0.02
+5000 to 0.015
+
+23: good result with good boundary
+
+test0 and test1
+batch normalization
+
+2496 and 2071
+a deep u-net means much less valid space
+
+may need several restarts
+
+test_output/out1: saver13
+test_output/out2: saver16
+test_output/out3: saver17
+
+margo0: L2, batch=10, finished, saver, good in background, bad in small items eg trees
+margo1: L1, batch=40, 20, 10, saver1, bad in background
+margo2: L2, feature_base=3, saver2, bad in background
+minion1: L2, loss on only center of the image, saver3, slight color change
+minion2: L1, saver4, slight color change
+margo1: L2, initialize bias with 0, batch=10, saver5, finished, bad even in background
+
+margo1: L2, initialize bias same way as weight, batch=10, conv only, saver6, finished, still some color change in subpart
+margo2: L2, batch=40, 20, 10, saver7, finished, color change in subpart
+margo3: L2, batch=40, 20, 10, max+mean, saver8, finished, total mess
+minion1: huber loss, batch=10, saver9, finished, not working
+
+margo1: L2_down, saver10
+
+best for now: saver13
+saver16 is also working, but saver13 is still better for now
+saver17 < saver16 < saver13
+
+margo1: 40
+margo2: 44
+margo3: 43
+minion1: 45
+minion2: 35
+minion3: 46
+
+15, 12, not working
+11 failed
+14, 18 not working (subpart color)
+
+16 working, but not perfect
+
+saver10, still some color changes
+
+tend to decrease colors like 1, 0, 0
+
+test_blur_approx.py: example of creating unets of different layers and other parameters
+input and output is consistent with the original program
+
+type/shape inference may be needed if we want to create nn for only a subpart of the computation
+
+unet limitation:
+single input array (compiler supports multiple input arrays however)
+
+problems:
+currently assume input/output have the same size (may have different number of channels) because using u-net
+(output shape can also be 2^n of input shape in unet)
+also, if output is of different size, shape inference may be needed
+
+using "same" padding instead of "valid" in the paper just for simplicity
+
+currently unet requires input shape can be divieded by 2**(nlayers-1), this may be solved by cropping the image if shape is not the same
+
+indexing
+
+2017.7.5
+
+how the output code is called
+
+current: output code written to a hd5 named python file
+         in compiler, during check process, import the output code module, and call main()
+
+test cases are objects passed to compiler, then passed to output code when calling main()
+
+constant arrays are written into output code in bytes
+todo: constant arrays can also be read from file in the output code
+
+used a lot of transpose, squeeze in order to play with tensorflow, this might potentially slow the speed (need experiment)
+
+
+1. handle input codes that contain indexing
+2. start simple approximation
+
+example input/output code
+rewrite input code in the compiler
+
+json.dumps
+json.loads
+numpy.ndarray.tolist
+
+U-net
